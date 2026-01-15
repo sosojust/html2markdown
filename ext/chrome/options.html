@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>HTML to Markdown Options</title>
+  </head>
+  <body>
+    <h3>后端</h3>
+    <label>后端地址: <input id="endpoint" placeholder="http://localhost:8000"></label>
+    <h3>转换选项</h3>
+    <label>强体分隔符:
+      <select id="strong_delimiter">
+        <option value="**">**</option>
+        <option value="__">__</option>
+      </select>
+    </label>
+    <br/>
+    <label>斜体分隔符:
+      <select id="emphasis_delimiter">
+        <option value="*">*</option>
+        <option value="_">_</option>
+      </select>
+    </label>
+    <br/>
+    <label>代码块围栏:
+      <select id="code_fence">
+        <option value="```">```</option>
+        <option value="~~~">~~~</option>
+      </select>
+    </label>
+    <br/>
+    <label>无序列表标记:
+      <select id="unordered_marker">
+        <option value="-">-</option>
+        <option value="*">*</option>
+        <option value="+">+</option>
+      </select>
+    </label>
+    <br/>
+    <label>列表缩进宽度:
+      <input id="list_indent_spaces" type="number" min="2" max="8" step="1" value="2"/>
+    </label>
+    <br/>
+    <label>未知标签策略:
+      <select id="unknown_tag_strategy">
+        <option value="html_wrapper">html_wrapper</option>
+        <option value="inline_text">inline_text</option>
+        <option value="remove">remove</option>
+      </select>
+    </label>
+    <br/>
+    <label><input type="checkbox" id="expand_to_block_boundaries" checked/> 选区扩展到块级边界</label>
+    <h3>鉴权</h3>
+    <label>Token: <input id="token" placeholder="Bearer Token"></label>
+    <button id="save">保存</button>
+    <script src="options.js"></script>
+  </body>
+</html>
