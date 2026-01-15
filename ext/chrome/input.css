@@ -1,0 +1,9 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+@layer base {
+  :root, :host {
+    --color-primary: #374151 !important;
+    --color-primary-content: #ffffff !important;
+  }
+}
