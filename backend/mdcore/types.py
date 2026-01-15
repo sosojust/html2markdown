@@ -1,18 +1,5 @@
-from enum import Enum
 from typing import Optional, Set
 from pydantic import BaseModel
-
-
-class TagType(str, Enum):
-    Block = "block"
-    Inline = "inline"
-    Remove = "remove"
-
-
-class Priority(int, Enum):
-    Early = 0
-    Standard = 1
-    Late = 2
 
 
 class ConvertOptions(BaseModel):
