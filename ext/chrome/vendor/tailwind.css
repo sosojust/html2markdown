@@ -1775,7 +1775,7 @@
 }
 @layer base {
   :root, :host {
-    --color-primary: #374151 !important;
+    --color-primary: #708090 !important;
     --color-primary-content: #ffffff !important;
   }
 }
