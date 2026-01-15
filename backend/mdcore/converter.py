@@ -1,8 +1,17 @@
-from typing import List
+from typing import List, Optional
 from lxml import html, etree
 from .types import ConvertOptions
 from .cleaner import clean_html_tree
-from html_to_markdown import convert as htm_convert, ConversionOptions
+from html_to_markdown import convert as htm_convert, convert_with_visitor, ConversionOptions
+
+class CodeBlockVisitor:
+    def visit_code_block(self, ctx, language: Optional[str], code: str):
+        """
+        Handle code blocks to ensure proper language tagging and strip extra newlines.
+        """
+        lang = language if language else ""
+        # Strip leading/trailing whitespace from code to avoid extra newlines in markdown
+        return {"type": "custom", "output": f"```{lang}\n{code.strip()}\n```\n"}
 
 def convert_html_to_markdown(s: str, options: ConvertOptions = ConvertOptions()) -> str:
     """
@@ -51,12 +60,8 @@ def convert_html_to_markdown(s: str, options: ConvertOptions = ConvertOptions())
 
     # 5. Convert to Markdown
     # Map options
-    # heading_style: "atx" (###) is standard
     bullets = "-*+"
     if options.unordered_marker:
-        # Use the user preference as the first bullet, or exclusively?
-        # html-to-markdown cycles. If we want consistent marker, maybe passing just one char works?
-        # Let's assume passing string "marker" works.
         bullets = options.unordered_marker
 
     htm_options = ConversionOptions(
@@ -66,8 +71,7 @@ def convert_html_to_markdown(s: str, options: ConvertOptions = ConvertOptions())
     )
     
     try:
-        return htm_convert(cleaned_html, htm_options).strip()
+        visitor = CodeBlockVisitor()
+        return convert_with_visitor(cleaned_html, options=htm_options, visitor=visitor).strip()
     except Exception as e:
-        # Fallback or error reporting
-        # For now return error as text or empty
         return f"Error converting to Markdown: {str(e)}"
