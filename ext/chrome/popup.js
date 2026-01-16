@@ -114,7 +114,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateUI(nextToken);
     
     // Sync logout to frontend
-    chrome.tabs.create({ url: "http://localhost:5173/?logout=true" });
+    // chrome.tabs.create({ url: "http://localhost:5173/?logout=true" });
+    
+    // Attempt background logout if possible, or just clear local state.
+    // For now, user requested NO redirection.
   });
 
   // Links

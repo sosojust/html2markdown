@@ -68,6 +68,15 @@ async function sendWithInjection(tabId, message) {
   });
 }
 
+function promptLogin() {
+  chrome.windows.create({
+    url: "popup.html",
+    type: "popup",
+    width: 420,
+    height: 600
+  });
+}
+
 async function performConversion(html, conversionOptions, token, endpoint) {
   const body = JSON.stringify({ html, options: conversionOptions });
   const headers = { "Content-Type": "application/json" };
@@ -80,7 +89,8 @@ async function performConversion(html, conversionOptions, token, endpoint) {
   const r = await fetch(`${endpoint}/v1/convert`, { method: "POST", headers, body });
   if (!r.ok) {
     if (r.status === 401) {
-      throw new Error("鉴权失败 (401)。请在扩展选项页检查 API Key 是否正确填写。");
+      promptLogin(); // Prompt login on 401
+      throw new Error("鉴权失败 (401)。请登录或检查 API Key。");
     }
     throw new Error(`Server returned ${r.status} ${r.statusText}`);
   }
@@ -131,6 +141,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // UPDATE: Prioritize sessionToken (Login) over token (API Key) so SSO works seamlessly.
   
   const effectiveToken = sessionToken ? sessionToken : token;
+
+  // Pre-check for token. If missing, prompt login immediately to avoid 401 overhead
+  if (!effectiveToken || !effectiveToken.trim()) {
+    promptLogin();
+    return;
+  }
 
   if (info.menuItemId === "convert-page") {
     chrome.scripting.executeScript({
