@@ -8,53 +8,88 @@
   <body class="bg-base-100 text-base-content min-h-screen flex items-center justify-center p-4">
     <div class="card w-full max-w-lg bg-base-200 shadow-xl">
       <div class="card-body">
-        <h2 class="card-title text-2xl font-bold text-primary mb-4">HTML to Markdown 设置</h2>
+        <h2 class="card-title text-2xl font-bold mb-4">HTML to Markdown 设置</h2>
         
         <form id="options-form" onsubmit="return false;" class="space-y-4">
+          <!-- Backend API Endpoint is hidden/managed via defaults or code now
           <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="heading_style" class="checkbox checkbox-primary" />
-              <span class="label-text">Setext 标题风格 (使用 === 和 --- 下划线)</span>
+            <label class="label">
+              <span class="label-text">后端 API 地址</span>
             </label>
+            <input type="text" id="endpoint" placeholder="http://localhost:8000" class="input input-bordered w-full" />
+          </div>
+          -->
+
+          <div class="divider">Markdown 风格</div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-control">
+              <label class="label"><span class="label-text">粗体</span></label>
+              <select id="strong_delimiter" class="select select-bordered w-full">
+                <option value="**">**bold**</option>
+                <option value="__">__bold__</option>
+              </select>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">斜体</span></label>
+              <select id="emphasis_delimiter" class="select select-bordered w-full">
+                <option value="*">*italic*</option>
+                <option value="_">_italic_</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text">代码块</span></label>
+            <input type="text" id="code_fence" placeholder="```" class="input input-bordered w-full" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+             <div class="form-control">
+              <label class="label"><span class="label-text">列表符号</span></label>
+              <select id="unordered_marker" class="select select-bordered w-full">
+                <option value="-">- Item</option>
+                <option value="*">* Item</option>
+                <option value="+">+ Item</option>
+              </select>
+            </div>
+            <div class="form-control">
+              <label class="label"><span class="label-text">列表缩进</span></label>
+              <input type="number" id="list_indent_spaces" value="2" class="input input-bordered w-full" />
+            </div>
+          </div>
+
+          <div class="form-control">
+            <label class="label"><span class="label-text">未知标签策略</span></label>
+            <select id="unknown_tag_strategy" class="select select-bordered w-full">
+              <option value="inline_text">保留文本 (inline_text)</option>
+              <option value="ignore">忽略 (ignore)</option>
+              <option value="keep_html">保留 HTML (keep_html)</option>
+            </select>
           </div>
 
           <div class="form-control">
             <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="hr_style" class="checkbox checkbox-primary" />
-              <span class="label-text">使用 *** 作为分隔符 (默认为 ---)</span>
+              <input type="checkbox" id="expand_to_block_boundaries" class="checkbox checkbox-neutral" />
+              <span class="label-text">选区自动扩展到块级元素 (推荐)</span>
             </label>
           </div>
+
+          <div class="divider">鉴权</div>
           
           <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="code_style" class="checkbox checkbox-primary" />
-              <span class="label-text">代码块使用 ``` 风格 (默认为缩进风格)</span>
+            <label class="label">
+              <span class="label-text">API Key</span>
+              <a href="#" id="dashboard-link" class="label-text-alt link link-neutral">获取 API Key</a>
             </label>
-          </div>
-          
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="link_style" class="checkbox checkbox-primary" />
-              <span class="label-text">在链接中引用 URL (Reference style)</span>
-            </label>
-          </div>
-          
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="strong_style" class="checkbox checkbox-primary" />
-              <span class="label-text">粗体使用 __ (默认为 **)</span>
-            </label>
-          </div>
-          
-          <div class="form-control">
-            <label class="label cursor-pointer justify-start gap-4">
-              <input type="checkbox" id="em_style" class="checkbox checkbox-primary" />
-              <span class="label-text">斜体使用 _ (默认为 *)</span>
+            <input type="password" id="token" placeholder="sk_live_..." class="input input-bordered w-full font-mono" />
+            <label class="label">
+              <span class="label-text-alt text-base-content/60">在 Dashboard 创建并复制 Key 粘贴到此处</span>
             </label>
           </div>
 
           <div class="card-actions justify-end mt-6">
-            <button id="save" class="btn btn-primary">
+            <button id="save" class="btn btn-neutral">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
               </svg>

@@ -1,0 +1,83 @@
+from fastapi import Request, HTTPException, Depends
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+from .config import ApiConfig
+from .ratelimit import RateLimiter
+from .auth import hash_api_key
+from .db import get_db
+from sqlalchemy.future import select
+from .models.entity import ApiKey, User
+from .repositories.base import ApiKeyRepository, UserRepository
+from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+
+cfg = ApiConfig.from_env()
+# Global limiter for now
+limiter = RateLimiter(limit=cfg.RL_MAX, window_seconds=int(cfg.RL_WINDOW_MS / 1000))
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token", auto_error=False)
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme), 
+    db: AsyncSession = Depends(get_db)
+):
+    if not cfg.AUTH_ENABLED:
+        return None
+        
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # 1. Check Legacy Token
+    if cfg.AUTH_TOKEN and token == cfg.AUTH_TOKEN:
+        return User(id=uuid.uuid4(), email="legacy@system", tier="admin")
+
+    # 2. Check if API Key (starts with sk_live_)
+    if token.startswith("sk_live_"):
+        hashed = hash_api_key(token)
+        key_repo = ApiKeyRepository(db)
+        key_record = await key_repo.get_by_hash(hashed)
+        if not key_record:
+            raise HTTPException(status_code=401, detail="Invalid API Key")
+        # Fetch associated user
+        user_repo = UserRepository(db)
+        user = await user_repo.get_by_id(key_record.user_id)
+        if not user:
+             raise HTTPException(status_code=401, detail="User not found")
+        return user
+
+    # 3. Check JWT
+    try:
+        payload = jwt.decode(token, cfg.SECRET_KEY, algorithms=[cfg.ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        # Convert string to UUID object for SQLAlchemy
+        user_id = uuid.UUID(user_id_str)
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+async def check_rate_limit(request: Request, user=Depends(get_current_user)):
+    if not cfg.RL_ENABLED:
+        return
+    
+    # Identify by User ID if available, else IP
+    identifier = "ip:" + request.client.host
+    if user:
+        identifier = f"user:{user.id}"
+
+    try:
+        allowed = await limiter.is_allowed(identifier)
+        if not allowed:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    except Exception as e:
+        # Fallback if Redis is down? Or fail open/closed?
+        # For MVP, log error and fail open (allow)
+        print(f"Rate limit check failed: {e}")
+        pass
+    
+    return identifier

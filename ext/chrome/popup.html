@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="vendor/tailwind.css">
+    <style>
+      body { width: 300px; }
+    </style>
+  </head>
+  <body class="bg-base-100 p-4">
+    <div class="flex flex-col gap-4">
+      <div class="flex items-center gap-2">
+        <img src="icon48.png" class="w-8 h-8">
+        <h1 class="text-lg font-bold">HTML to Markdown</h1>
+      </div>
+
+      <!-- Status Indicator -->
+      <div id="status-alert" class="alert alert-warning text-xs py-2 hidden">
+        <span>未登录 / 未配置 Key</span>
+      </div>
+
+      <!-- Login Form -->
+      <div id="login-section" class="flex flex-col gap-2 hidden">
+        <input type="email" id="email" placeholder="邮箱" class="input input-bordered input-sm w-full" />
+        <input type="password" id="password" placeholder="密码" class="input input-bordered input-sm w-full" />
+        <button id="btn-login" class="btn btn-neutral btn-sm w-full">登录</button>
+        <div class="text-center text-xs">
+          <a href="#" id="link-register" class="link link-neutral">去注册账号</a>
+        </div>
+        <div id="login-msg" class="text-xs text-error text-center h-4"></div>
+      </div>
+
+      <!-- Logged In View -->
+      <div id="user-section" class="flex flex-col gap-2 hidden">
+        <div class="text-sm text-center font-mono bg-base-200 p-2 rounded break-all" id="user-display"></div>
+        <button id="btn-logout" class="btn btn-outline btn-error btn-sm w-full">退出登录</button>
+      </div>
+
+      <div class="divider my-0"></div>
+
+      <div class="flex flex-col gap-2">
+        <button id="btn-dashboard" class="btn btn-ghost btn-xs w-full">
+          打开管理后台 (Dashboard)
+        </button>
+        <button id="btn-options" class="btn btn-ghost btn-xs w-full">
+          扩展设置 (Settings)
+        </button>
+      </div>
+
+      <div class="divider my-0"></div>
+      
+      <div class="text-xs text-base-content/50 text-center">
+        右键网页空白处开始转换
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

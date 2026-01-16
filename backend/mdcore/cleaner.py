@@ -2,7 +2,7 @@ from lxml import etree
 import re
 
 REMOVE_TAGS = {
-    "script", "style", "noscript", "iframe", "svg", "template", "embed", "object", "applet", "area", "map", "source", "track", "param", "textarea"
+    "script", "style", "noscript", "iframe", "svg", "template", "embed", "object", "applet", "area", "map", "source", "track", "param"
 }
 
 COMMON_LANGS = {"text", "txt", "python", "py", "javascript", "js", "java", "c", "cpp", "go", "rust", "html", "css", "bash", "sh", "shell", "sql", "json", "yaml", "xml", "mathematica", "matlab", "r", "ruby", "php", "swift", "kotlin", "typescript", "ts"}

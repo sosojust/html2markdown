@@ -13,6 +13,11 @@ class ApiConfig(BaseModel):
     MAX_FETCH_LENGTH: int = 3_000_000
     HTTP_USER_AGENT: str = "html-to-md/0.1 (+https://example.local)"
     MAX_REDIRECTS: int = 5
+    DATABASE_URL: str = "postgresql+asyncpg://md_user:md_password@localhost:5432/md_db"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     @classmethod
     def from_env(cls):
@@ -42,4 +47,9 @@ class ApiConfig(BaseModel):
             MAX_FETCH_LENGTH=_env_int("MAX_FETCH_LENGTH", cls.model_fields["MAX_FETCH_LENGTH"].default),
             HTTP_USER_AGENT=_env_str("HTTP_USER_AGENT", cls.model_fields["HTTP_USER_AGENT"].default),
             MAX_REDIRECTS=_env_int("MAX_REDIRECTS", cls.model_fields["MAX_REDIRECTS"].default),
+            DATABASE_URL=_env_str("DATABASE_URL", cls.model_fields["DATABASE_URL"].default),
+            REDIS_URL=_env_str("REDIS_URL", cls.model_fields["REDIS_URL"].default),
+            SECRET_KEY=_env_str("SECRET_KEY", cls.model_fields["SECRET_KEY"].default),
+            ALGORITHM=_env_str("ALGORITHM", cls.model_fields["ALGORITHM"].default),
+            ACCESS_TOKEN_EXPIRE_MINUTES=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", cls.model_fields["ACCESS_TOKEN_EXPIRE_MINUTES"].default),
         )

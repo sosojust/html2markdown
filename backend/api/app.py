@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.responses import Response
@@ -11,7 +11,8 @@ import time
 import anyio
 from .config import ApiConfig
 import httpx
-
+from .routers import auth
+from .dependencies import get_current_user, check_rate_limit
 
 class ConvertRequest(BaseModel):
     html: str
@@ -22,6 +23,7 @@ class ConvertByUrlRequest(BaseModel):
 
 
 app = FastAPI()
+app.include_router(auth.router)
 cfg = ApiConfig.from_env()
 
 MAX_HTML_LENGTH = cfg.MAX_HTML_LENGTH
@@ -31,24 +33,18 @@ AUTH_TOKEN = cfg.AUTH_TOKEN
 RL_ENABLED = cfg.RL_ENABLED
 RL_WINDOW_MS = cfg.RL_WINDOW_MS
 RL_MAX = cfg.RL_MAX
-_buckets: Dict[str, Dict[str, float]] = {}
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=False,
+    allow_credentials=True, # Changed to True for Auth
 )
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    headers = {}
-    if RL_ENABLED:
-        key = _key_for_request(request)
-        b = _buckets.get(key)
-        headers["X-RateLimit-Limit"] = str(RL_MAX)
-        headers["X-RateLimit-Remaining"] = str(b["tokens"]) if b else "0"
-    return JSONResponse(status_code=exc.status_code, content={"code": exc.status_code, "message": exc.detail or "error", "details": None}, headers=headers)
+    # TODO: Add rate limit headers if possible
+    return JSONResponse(status_code=exc.status_code, content={"code": exc.status_code, "message": exc.detail or "error", "details": None})
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
@@ -62,45 +58,13 @@ def health():
 def version():
     return {"version": "0.1.0"}
 
-def _key_for_request(req: Request) -> str:
-    auth = req.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        return "tok:" + auth[len("Bearer "):]
-    client = req.client.host if req.client else "unknown"
-    return "ip:" + client
-
-def _rate_limit_check(req: Request):
-    if not RL_ENABLED:
-        return None
-    key = _key_for_request(req)
-    now = time.time() * 1000
-    b = _buckets.get(key)
-    if not b:
-        _buckets[key] = {"tokens": RL_MAX - 1, "ts": now}
-        return _buckets[key]
-    elapsed = now - b["ts"]
-    if elapsed >= RL_WINDOW_MS:
-        b["tokens"] = RL_MAX - 1
-        b["ts"] = now
-        return b
-    if b["tokens"] <= 0:
-        raise HTTPException(status_code=429, detail="rate_limited")
-    b["tokens"] -= 1
-    return b
-
-def _auth_check(req: Request):
-    if not AUTH_ENABLED:
-        return
-    if req.url.path in ("/v1/health", "/v1/version"):
-        return
-    auth = req.headers.get("authorization", "")
-    if not (auth.startswith("Bearer ") and AUTH_TOKEN and auth[len("Bearer "):] == AUTH_TOKEN):
-        raise HTTPException(status_code=401, detail="unauthorized")
-
 @app.post("/v1/convert")
-async def convert(req: ConvertRequest, request: Request):
-    _auth_check(request)
-    bucket = _rate_limit_check(request)
+async def convert(
+    req: ConvertRequest, 
+    request: Request,
+    user = Depends(get_current_user),
+    limit_key = Depends(check_rate_limit)
+):
     if not isinstance(req.html, str) or len(req.html) == 0:
         raise HTTPException(status_code=422, detail="html_required")
     if len(req.html.encode("utf-8")) > MAX_HTML_LENGTH:
@@ -112,18 +76,16 @@ async def convert(req: ConvertRequest, request: Request):
     except TimeoutError:
         raise HTTPException(status_code=504, detail="timeout")
     headers = {}
-    if RL_ENABLED:
-        headers["X-RateLimit-Limit"] = str(RL_MAX)
-        if bucket:
-            headers["X-RateLimit-Remaining"] = str(bucket["tokens"])
-            reset_ms = int(max(bucket["ts"] + RL_WINDOW_MS - time.time() * 1000, 0))
-            headers["X-RateLimit-Reset"] = str(reset_ms)
+    # TODO: Add RateLimit headers
     return JSONResponse({"markdown": md, "meta": {"length": len(md)}}, headers=headers)
 
 @app.post("/v1/convert/by_url")
-async def convert_by_url(req: ConvertByUrlRequest, request: Request):
-    _auth_check(request)
-    bucket = _rate_limit_check(request)
+async def convert_by_url(
+    req: ConvertByUrlRequest, 
+    request: Request,
+    user = Depends(get_current_user),
+    limit_key = Depends(check_rate_limit)
+):
     if not isinstance(req.url, str) or len(req.url) == 0:
         raise HTTPException(status_code=422, detail="url_required")
     # validate scheme
@@ -151,12 +113,7 @@ async def convert_by_url(req: ConvertByUrlRequest, request: Request):
     opts = req.options or ConvertOptions(domain=origin)
     md = await anyio.to_thread.run_sync(convert_html_to_markdown, text, opts)
     headers = {}
-    if RL_ENABLED:
-        headers["X-RateLimit-Limit"] = str(RL_MAX)
-        if bucket:
-            headers["X-RateLimit-Remaining"] = str(bucket["tokens"])
-            reset_ms = int(max(bucket["ts"] + RL_WINDOW_MS - time.time() * 1000, 0))
-            headers["X-RateLimit-Reset"] = str(reset_ms)
+    # TODO: Add RateLimit headers
     return JSONResponse({"markdown": md, "meta": {"length": len(md)}}, headers=headers)
 
 def _origin(u: str) -> Optional[str]:

@@ -74,4 +74,8 @@ def convert_html_to_markdown(s: str, options: ConvertOptions = ConvertOptions())
         visitor = CodeBlockVisitor()
         return convert_with_visitor(cleaned_html, options=htm_options, visitor=visitor).strip()
     except Exception as e:
-        return f"Error converting to Markdown: {str(e)}"
+        # Fallback to basic conversion if visitor fails (e.g. RefCell panic)
+        try:
+            return htm_convert(cleaned_html, options=htm_options).strip()
+        except Exception as e2:
+             return f"Error converting to Markdown: {str(e)} (Fallback failed: {str(e2)})"
