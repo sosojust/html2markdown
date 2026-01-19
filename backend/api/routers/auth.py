@@ -6,9 +6,10 @@ from ..db import get_db
 from ..models.entity import User, ApiKey
 from ..repositories.base import UserRepository, ApiKeyRepository
 from ..schemas import UserCreate, UserRead, ApiKeyCreate, ApiKeyShow, Token
-from ..auth import get_password_hash, verify_password, generate_api_key, hash_api_key, create_access_token
+from ..auth import get_password_hash, verify_password, generate_api_key, hash_api_key, create_access_token, create_refresh_token
 from ..config import ApiConfig
 from ..dependencies import get_current_user
+from jose import jwt, JWTError
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
@@ -33,7 +34,51 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     access_token = create_access_token(
         data={"sub": str(user.id), "email": user.email}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token_expires = timedelta(days=cfg.REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_refresh_token(
+        data={"sub": str(user.id), "email": user.email}, expires_delta=refresh_token_expires
+    )
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@router.post("/refresh", response_model=Token)
+async def refresh_token(request_data: dict, db: AsyncSession = Depends(get_db)):
+    refresh_token = request_data.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Refresh token missing")
+    
+    cfg = ApiConfig.from_env()
+    try:
+        payload = jwt.decode(refresh_token, cfg.SECRET_KEY, algorithms=[cfg.ALGORITHM])
+        user_id_str: str = payload.get("sub")
+        email: str = payload.get("email")
+        token_type: str = payload.get("type")
+        
+        if user_id_str is None or token_type != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    repo = UserRepository(db)
+    user = await repo.get_by_email(email)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    access_token_expires = timedelta(minutes=cfg.ACCESS_TOKEN_EXPIRE_MINUTES)
+    new_access_token = create_access_token(
+        data={"sub": str(user.id), "email": user.email}, expires_delta=access_token_expires
+    )
+    
+    # Optionally rotate refresh token here
+    # For now, just return a new access token and the same refresh token (or new one)
+    # Let's issue a new refresh token too to keep it alive? Or keep same?
+    # Usually we rotate.
+    new_refresh_token_expires = timedelta(days=cfg.REFRESH_TOKEN_EXPIRE_DAYS)
+    new_refresh_token = create_refresh_token(
+        data={"sub": str(user.id), "email": user.email}, expires_delta=new_refresh_token_expires
+    )
+    
+    return {"access_token": new_access_token, "refresh_token": new_refresh_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=UserRead)
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):

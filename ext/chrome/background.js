@@ -5,7 +5,7 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function getOptions() {
-  const { endpoint, options, token, sessionToken } = await chrome.storage.sync.get({
+  const { endpoint, options, token, sessionToken, sessionRefreshToken } = await chrome.storage.sync.get({
     endpoint: "http://localhost:8000",
     options: {
       strong_delimiter: "**",
@@ -15,36 +15,32 @@ async function getOptions() {
       expand_to_block_boundaries: true
     },
     token: "",
-    sessionToken: ""
+    sessionToken: "",
+    sessionRefreshToken: ""
   });
   // enforce inline_text to avoid leaking raw HTML wrappers
   if (!options.unknown_tag_strategy || options.unknown_tag_strategy === "html_wrapper") {
     options.unknown_tag_strategy = "inline_text";
   }
-  return { endpoint, options, token, sessionToken };
+  return { endpoint, options, token, sessionToken, sessionRefreshToken };
 }
 
 // Listen for token sync messages from content script
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg.type === "convert-selection") {
-     // Handled later in clicked listener, but we need to return false here so we don't block?
-     // Actually, convert-selection is sent from background to content usually, or content to background?
-     // Wait, background sends "convert-selection" to content.
-     // Content script listens for it.
-     // Here we are in background.js.
-     // Is there any message sent TO background with type "convert-selection"? No.
      return false;
   }
   
   if (msg.type === "SYNC_TOKEN") {
       console.log("Received SYNC_TOKEN:", msg.token ? "Token present" : "Token cleared");
-      // Save to storage.sync so it persists across devices if needed, or local if just this session.
-      // Use sync for consistency with options.
-      // Note: sessionToken is managed automatically.
       if (msg.token) {
-        chrome.storage.sync.set({ sessionToken: msg.token, sessionEmail: msg.email || "" });
+        const updateData = { sessionToken: msg.token, sessionEmail: msg.email || "" };
+        if (msg.refreshToken) {
+          updateData.sessionRefreshToken = msg.refreshToken;
+        }
+        chrome.storage.sync.set(updateData);
       } else {
-        chrome.storage.sync.remove(["sessionToken", "sessionEmail"]);
+        chrome.storage.sync.remove(["sessionToken", "sessionEmail", "sessionRefreshToken"]);
       }
       respond({ status: "ok" });
       return true;
@@ -89,7 +85,50 @@ async function performConversion(html, conversionOptions, token, endpoint) {
   const r = await fetch(`${endpoint}/v1/convert`, { method: "POST", headers, body });
   if (!r.ok) {
     if (r.status === 401) {
-      promptLogin(); // Prompt login on 401
+      // Try refresh logic
+      const { sessionRefreshToken } = await chrome.storage.sync.get("sessionRefreshToken");
+      if (sessionRefreshToken) {
+        console.log("Token expired, attempting refresh...");
+        try {
+          const refResp = await fetch(`${endpoint}/v1/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: sessionRefreshToken })
+          });
+          
+          if (refResp.ok) {
+            const data = await refResp.json();
+            const { access_token, refresh_token: new_refresh_token } = data;
+            
+            // Update storage
+             const updates = { sessionToken: access_token };
+             if (new_refresh_token) updates.sessionRefreshToken = new_refresh_token;
+             await chrome.storage.sync.set(updates);
+             
+             // Retry original request
+             headers["Authorization"] = "Bearer " + access_token;
+             const r2 = await fetch(`${endpoint}/v1/convert`, { method: "POST", headers, body });
+             if (r2.ok) {
+               const j2 = await r2.json();
+               if (!j2 || typeof j2.markdown !== "string") throw new Error("Invalid response format from server");
+               return j2.markdown;
+             }
+           } else {
+              console.log("Refresh failed with status", refResp.status);
+              // Clear session on failure
+              await chrome.storage.sync.remove(["sessionToken", "sessionRefreshToken"]);
+           }
+         } catch (e) {
+           console.error("Refresh error:", e);
+           // Clear session on error
+           await chrome.storage.sync.remove(["sessionToken", "sessionRefreshToken"]);
+         }
+       } else {
+         // No refresh token available, clear session to reflect logged out state
+         await chrome.storage.sync.remove(["sessionToken", "sessionRefreshToken"]);
+       }
+       
+       promptLogin(); // Prompt login on 401
       throw new Error("鉴权失败 (401)。请登录或检查 API Key。");
     }
     throw new Error(`Server returned ${r.status} ${r.statusText}`);

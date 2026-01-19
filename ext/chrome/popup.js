@@ -87,13 +87,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const data = await res.json();
       const newToken = data.access_token;
+      const newRefreshToken = data.refresh_token;
       
       const emailFromToken = getEmailFromToken(newToken);
       sessionEmail = emailFromToken;
       sessionToken = newToken; // Update local variable
       
       // Save to sessionToken, NOT token (keep API Key separate)
-      await chrome.storage.sync.set({ sessionToken: newToken, sessionEmail: emailFromToken });
+      await chrome.storage.sync.set({ 
+          sessionToken: newToken, 
+          sessionRefreshToken: newRefreshToken,
+          sessionEmail: emailFromToken 
+      });
       loginMsg.textContent = "";
       updateUI(newToken || token);
       

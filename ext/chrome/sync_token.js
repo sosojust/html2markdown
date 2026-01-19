@@ -9,10 +9,16 @@
     function syncToken() {
         const token = localStorage.getItem("token");
         const email = localStorage.getItem("user_email");
+        const refreshToken = localStorage.getItem("refresh_token");
         if (token) {
             console.log("[HTML-to-Markdown] Found token, syncing to extension...");
             try {
-                chrome.runtime.sendMessage({ type: "SYNC_TOKEN", token: token, email: email }, (response) => {
+                chrome.runtime.sendMessage({ 
+                    type: "SYNC_TOKEN", 
+                    token: token, 
+                    email: email,
+                    refreshToken: refreshToken
+                }, (response) => {
                     if (chrome.runtime.lastError) {
                          // Background script might be sleeping or not ready, or we are in a context where we can't send
                          // However, for content scripts defined in manifest, this should work.
@@ -33,7 +39,7 @@
 
     // Listen for storage changes (e.g. login/logout)
     window.addEventListener("storage", (event) => {
-        if (event.key === "token" || event.key === "user_email") {
+        if (event.key === "token" || event.key === "user_email" || event.key === "refresh_token") {
             syncToken();
         }
     });
@@ -44,7 +50,7 @@
     const originalSetItem = localStorage.setItem;
     localStorage.setItem = function(key, value) {
         originalSetItem.apply(this, arguments);
-        if (key === "token" || key === "user_email") syncToken();
+        if (key === "token" || key === "user_email" || key === "refresh_token") syncToken();
     };
 
     const originalRemoveItem = localStorage.removeItem;

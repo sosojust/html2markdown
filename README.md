@@ -62,8 +62,12 @@
 
 ## 变更记录
 - 2026-01-19:
+  - 后端：引入 Refresh Token 机制（Access Token 30分钟，Refresh Token 30天），解决用户频繁登录问题
+  - 前端：实现自动 Token 刷新逻辑，当 Access Token 过期时无感刷新并同步至扩展
   - 扩展：优化鉴权体验，当未配置 API Key 且未登录时，点击转换自动弹出登录窗口（promptLogin）
   - 扩展：移除登出时的自动页面跳转，仅清除本地状态
+  - 修复：增强 Refresh Token 机制的健壮性，自动清理无 Refresh Token 的遗留会话，防止前端与扩展状态不一致
+  - 配置：默认开启鉴权 (AUTH_ENABLED=1)
 - 2026-01-16:
   - 后端：实现 JWT 鉴权与 API Key 系统，支持多种密码哈希方案 (Argon2/Bcrypt/PBKDF2)
   - 前端：新增 Login/Register/Dashboard 页面，支持用户注册与 API Key 管理
