@@ -61,6 +61,9 @@
   - 转换结果自动保存并打开 result.html 预览页
 
 ## 变更记录
+- 2026-01-19:
+  - 扩展：优化鉴权体验，当未配置 API Key 且未登录时，点击转换自动弹出登录窗口（promptLogin）
+  - 扩展：移除登出时的自动页面跳转，仅清除本地状态
 - 2026-01-16:
   - 后端：实现 JWT 鉴权与 API Key 系统，支持多种密码哈希方案 (Argon2/Bcrypt/PBKDF2)
   - 前端：新增 Login/Register/Dashboard 页面，支持用户注册与 API Key 管理
