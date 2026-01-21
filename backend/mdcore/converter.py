@@ -39,6 +39,41 @@ def convert_html_to_markdown(s: str, options: ConvertOptions = ConvertOptions())
     # 3. Clean DOM tree (remove scripts, styles, hidden elements, etc.)
     clean_html_tree(root)
 
+    # 3.5. Preprocess tables to ensure they have a header (required for Markdown tables)
+    for table in root.xpath('//table'):
+        # Check if table has thead
+        if table.find('thead') is not None:
+            continue
+            
+        # Check for tbody or direct tr
+        tbody = table.find('tbody')
+        first_row = None
+        
+        if tbody is not None:
+            rows = tbody.findall('tr')
+            if rows:
+                first_row = rows[0]
+        else:
+            rows = table.findall('tr')
+            if rows:
+                first_row = rows[0]
+        
+        if first_row is not None:
+            # Create thead
+            thead = html.Element('thead')
+            # Insert thead before tbody or as first child
+            if tbody is not None:
+                table.insert(table.index(tbody), thead)
+            else:
+                table.insert(0, thead)
+            
+            # Move first row to thead
+            thead.append(first_row)
+            
+            # Convert td to th in the header row for better semantics
+            for td in first_row.findall('td'):
+                td.tag = 'th'
+
     # 4. Serialize back to HTML string
     # We use inner HTML of the wrapper div
     # etree.tostring returns bytes, decode to string

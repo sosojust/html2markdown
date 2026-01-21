@@ -9,7 +9,7 @@
     "128": "icon128.png"
   },
   "permissions": ["activeTab", "scripting", "contextMenus", "clipboardWrite", "downloads", "storage"],
-  "host_permissions": ["http://localhost:8000/*", "https://localhost:8000/*", "http://127.0.0.1:8000/*", "https://127.0.0.1:8000/*"],
+  "host_permissions": ["http://localhost:8000/*", "https://localhost:8000/*", "http://127.0.0.1:8000/*", "https://127.0.0.1:8000/*", "<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },

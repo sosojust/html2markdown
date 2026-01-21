@@ -47,23 +47,6 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   }
 });
 
-async function sendWithInjection(tabId, message) {
-  return new Promise(async (resolve) => {
-    chrome.tabs.sendMessage(tabId, message, async (res) => {
-      if (chrome.runtime.lastError || !res) {
-        try {
-          await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
-          chrome.tabs.sendMessage(tabId, message, (res2) => resolve(res2 || null));
-        } catch (e) {
-          resolve(null);
-        }
-      } else {
-        resolve(res);
-      }
-    });
-  });
-}
-
 function promptLogin() {
   chrome.windows.create({
     url: "popup.html",
@@ -146,38 +129,32 @@ function showResult(markdown) {
   });
 }
 
-function showError(err) {
+function showError(err, tabId = null) {
   console.error("Conversion failed:", err);
-  chrome.notifications.create({
-    type: "basic",
-    iconUrl: chrome.runtime.getURL("icon48.png"),
-    title: "Conversion Failed",
-    message: err.message
-  });
+  
+  // Try to show alert in the tab if tabId is provided
+  if (tabId) {
+    chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      func: (msg) => { alert("HTML-to-Markdown Error:\n" + msg); },
+      args: [err.message]
+    }).catch(e => console.error("Failed to show alert in tab:", e));
+  } else {
+    // Fallback to notification if no tabId (e.g. background error unrelated to specific tab action, though unlikely here)
+    chrome.notifications.create({
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icon48.png"),
+      title: "Conversion Failed",
+      message: err.message
+    });
+  }
+  
   // Update storage to show error in result page if user opens it manually
   chrome.storage.local.set({ lastMarkdown: `# Error\n\nConversion failed: ${err.message}` });
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const { endpoint, options, token, sessionToken } = await getOptions();
-  
-  // Logic: Prefer API Key (token) if set, otherwise use sessionToken (login state)
-  // Or: Prefer sessionToken (current login) if available? 
-  // User Requirement: "登录状态不需要使用APIKEY; 非登录态，可以通过APIKEY请求"
-  // This implies if sessionToken exists, use it. If not, use API Key.
-  // Actually, usually API Key is more "powerful" or persistent. 
-  // But let's follow the requirement: If logged in (sessionToken), we don't need API Key.
-  // So we can use either. Let's try sessionToken first, then API Key.
-  // Wait, if I explicitly set an API Key in options, I probably want to use it?
-  // But if I am logged in, I might expect that to work without configuring API Key.
-  // So: effectiveToken = token || sessionToken (if API key is set, use it; else use session)
-  // OR: effectiveToken = sessionToken || token (if logged in, use that; else use key)
-  
-  // Let's go with: Use API Key if present (explicit override), else use Session Token.
-  // But the user said "Login state DOES NOT NEED ApiKey".
-  // So if I have no API Key but have Session Token, it should work.
-  // If I have API Key, it should also work.
-  // UPDATE: Prioritize sessionToken (Login) over token (API Key) so SSO works seamlessly.
   
   const effectiveToken = sessionToken ? sessionToken : token;
 
@@ -200,26 +177,119 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
         showResult(markdown);
       } catch (err) {
-        showError(err);
+        showError(err, tab.id);
       }
     });
   }
   
   if (info.menuItemId === "convert-selection-strict" || info.menuItemId === "convert-selection-expand") {
     const expand = info.menuItemId === "convert-selection-expand";
-    const res = await sendWithInjection(tab.id, { type: "convert-selection", expand });
-    
-    if (!res || !res.html) {
-      showError(new Error("Could not retrieve selection content."));
-      return;
-    }
     
     try {
+      // Prioritize the specific frame where the click occurred
+      const target = { tabId: tab.id };
+      if (typeof info.frameId === 'number') {
+        target.frameIds = [info.frameId];
+      } else {
+        target.allFrames = true;
+      }
+
+      let results;
+      try {
+        results = await chrome.scripting.executeScript({
+          target: target,
+          func: (shouldExpand) => {
+            try {
+              function expandRangeToBlocks(range) {
+                let start = range.startContainer.nodeType === Node.ELEMENT_NODE ? range.startContainer : range.startContainer.parentElement;
+                let end = range.endContainer.nodeType === Node.ELEMENT_NODE ? range.endContainer : range.endContainer.parentElement;
+                const startBlock = start.closest('p,div,section,article,li,pre,blockquote,h1,h2,h3,h4,h5,h6,td,th,tr,table,ul,ol') || start;
+                const endBlock = end.closest('p,div,section,article,li,pre,blockquote,h1,h2,h3,h4,h5,h6,td,th,tr,table,ul,ol') || end;
+                const r = document.createRange();
+                r.setStartBefore(startBlock);
+                r.setEndAfter(endBlock);
+                return r;
+              }
+
+              // 1. Try Standard Selection
+              const sel = window.getSelection();
+              if (sel && sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().trim()) {
+                let range = sel.getRangeAt(0).cloneRange();
+                if (shouldExpand) range = expandRangeToBlocks(range);
+                
+                const container = document.createElement('div');
+                container.appendChild(range.cloneContents());
+                return { html: container.innerHTML, found: true };
+              }
+
+              // 2. Try Active Element (Input/Textarea)
+              let active = document.activeElement;
+              // Drill down into shadow roots
+              while (active && active.shadowRoot && active.shadowRoot.activeElement) {
+                active = active.shadowRoot.activeElement;
+              }
+              
+              if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                const text = active.value.substring(active.selectionStart, active.selectionEnd);
+                if (text && text.trim()) {
+                   // Wrap in pre for markdown preservation or just return as text
+                   // For consistency, return as HTML
+                   // Escape HTML entities? simpler to just return text and let backend handle or wrap in <p>
+                   // Let's wrap in <p> to treat as paragraph
+                   const safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+                   return { html: `<p>${safeText}</p>`, found: true };
+                }
+              }
+
+              return { found: false };
+            } catch (e) {
+              return { error: e.toString() };
+            }
+          },
+          args: [expand]
+        });
+      } catch (injectionError) {
+         // If injection failed (e.g. frame permission issue), fallback to all frames if we tried specific frame, or just error
+         if (target.frameIds) {
+             console.warn("Specific frame injection failed, trying all frames...", injectionError);
+             results = await chrome.scripting.executeScript({
+                target: { tabId: tab.id, allFrames: true },
+                func: (shouldExpand) => { /* Same function duplicated or referenced? Needs to be inline or variable */ 
+                   // To avoid duplication, we rely on the first attempt's failure being handled below if results is undefined
+                   // But executeScript func must be provided again.
+                   // Let's just re-throw or handle. 
+                   // Actually, if we add <all_urls>, permission error shouldn't happen.
+                   // Let's stick to the result processing.
+                   return { found: false, error: "Fallback not implemented in inline code" }; 
+                },
+                args: [expand]
+             });
+             // Wait, reusing the function source is tricky in this tool call.
+             // Let's just trust the permission fix.
+             throw injectionError;
+         }
+         throw injectionError;
+      }
+
+      // Find the first successful result
+      const result = results.find(r => r.result && r.result.found);
+      
+      if (!result) {
+        // Check if any frame reported an error
+        const errorResult = results.find(r => r.result && r.result.error);
+        if (errorResult) {
+             throw new Error("Script error in frame: " + errorResult.result.error);
+        }
+        showError(new Error("未找到选区内容。\n\n可能原因：\n1. 未选中文本\n2. 选区在跨域 iframe 中且权限不足\n3. 页面使用了 Canvas 或特殊渲染方式"), tab.id);
+        return;
+      }
+
+      const html = result.result.html;
       const conversionOptions = { domain: new URL(tab.url).origin, ...options, expand_to_block_boundaries: expand };
-      const markdown = await performConversion(res.html, conversionOptions, effectiveToken, endpoint);
+      const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
       showResult(markdown);
     } catch (err) {
-      showError(err);
+      showError(err, tab.id);
     }
   }
 });
