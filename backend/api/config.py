@@ -19,6 +19,7 @@ class ApiConfig(BaseModel):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    ALLOWED_ORIGINS: str = "*"
 
     @classmethod
     def from_env(cls):
@@ -53,4 +54,5 @@ class ApiConfig(BaseModel):
             SECRET_KEY=_env_str("SECRET_KEY", cls.model_fields["SECRET_KEY"].default),
             ALGORITHM=_env_str("ALGORITHM", cls.model_fields["ALGORITHM"].default),
             ACCESS_TOKEN_EXPIRE_MINUTES=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", cls.model_fields["ACCESS_TOKEN_EXPIRE_MINUTES"].default),
+            ALLOWED_ORIGINS=_env_str("ALLOWED_ORIGINS", cls.model_fields["ALLOWED_ORIGINS"].default),
         )

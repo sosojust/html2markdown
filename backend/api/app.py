@@ -34,9 +34,12 @@ RL_ENABLED = cfg.RL_ENABLED
 RL_WINDOW_MS = cfg.RL_WINDOW_MS
 RL_MAX = cfg.RL_MAX
 
+# Parse allowed origins from comma-separated string
+origins = [origin.strip() for origin in cfg.ALLOWED_ORIGINS.split(",")] if cfg.ALLOWED_ORIGINS else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True, # Changed to True for Auth

@@ -60,7 +60,67 @@
   - 右键菜单选择“转为 Markdown（整页/选区）”
   - 转换结果自动保存并打开 result.html 预览页
 
+## 生产部署
+本项目提供基于 Docker Compose 的一键生产部署方案，包含后端、前端（Nginx）、PostgreSQL 数据库和 Redis 缓存。
+
+### 1. 准备工作
+确保服务器已安装 Docker 和 Docker Compose。
+
+### 2. 启动服务
+使用 `docker-compose.prod.yml` 启动所有服务：
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### 3. 初始化数据库
+首次部署需导入数据库结构：
+```bash
+# 等待数据库容器启动完成后执行
+docker compose -f docker-compose.prod.yml exec -T db psql -U md_user -d md_db < backend/schema/latest_postgres.sql
+```
+
+### 4. 访问服务
+- 前端页面：http://localhost (或服务器 IP)
+- 后端 API：http://localhost/v1 (通过 Nginx 代理)
+
+### 5. 环境变量配置
+在 `docker-compose.prod.yml` 中可调整以下关键环境变量：
+- `SECRET_KEY`: 用于 JWT 签名的密钥（生产环境务必修改）
+- `AUTH_ENABLED`: 是否开启鉴权（默认为 true）
+- `DATABASE_URL`: 数据库连接串
+- `REDIS_URL`: Redis 连接串
+- `ALLOWED_ORIGINS`: 允许跨域访问的域名，生产环境建议设置为前端域名（如 `https://example.com`），多个域名用逗号分隔
+
+### 4. 域名配置（可选）
+如果您拥有真实域名（例如 `example.com`），请执行以下调整：
+
+1. **修改 Nginx 配置**：
+   编辑 `frontend/nginx.conf`，将 `server_name` 修改为您的域名：
+   ```nginx
+   server_name example.com www.example.com;
+   ```
+
+2. **配置跨域许可**：
+   修改 `docker-compose.prod.yml` 中的 `ALLOWED_ORIGINS`：
+   - **插件使用场景（推荐）**：设置为 `*`。因为插件会在任意网页运行，请求来源（Origin）是动态的。
+     ```yaml
+     - ALLOWED_ORIGINS=*
+     ```
+   - **仅Web端使用**：如果您只通过网页版前端使用，可设置为您的域名以提高安全性：
+     ```yaml
+     - ALLOWED_ORIGINS=http://example.com,https://example.com
+     ```
+
+3. **HTTPS 支持**（建议）：
+   生产环境强烈建议开启 HTTPS。您可以在宿主机使用另一层 Nginx/Caffeine 进行 SSL 卸载，并将流量转发到本服务的 80 端口；或者直接挂载证书到容器内并修改 `frontend/nginx.conf` 开启 443 监听。
+
 ## 变更记录
+- 2026-01-28:
+  - 安全：增加登录/注册接口的独立限流策略（5次/分钟）
+  - 安全：增强用户注册密码强度校验（至少8位）
+  - 安全：支持通过 `ALLOWED_ORIGINS` 配置 CORS 策略
+  - 文档：添加生产环境部署指引 (Docker Compose)
+  - 工程：添加 Dockerfile 和 docker-compose.prod.yml 支持一键部署
 - 2026-01-19:
   - 后端：引入 Refresh Token 机制（Access Token 30分钟，Refresh Token 30天），解决用户频繁登录问题
   - 前端：实现自动 Token 刷新逻辑，当 Access Token 过期时无感刷新并同步至扩展

@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   const api = axios.create({
-    baseURL: 'http://localhost:8000/v1',
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/v1',
   });
 
   if (token) {
@@ -90,7 +90,8 @@ export const AuthProvider = ({ children }) => {
               // However, our api instance has the old Authorization header attached.
               // Let's temporarily unset it or create a new instance?
               // Simple fetch is safer.
-              const resp = await fetch('http://localhost:8000/v1/auth/refresh', {
+              const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/v1';
+              const resp = await fetch(`${baseURL}/auth/refresh`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json'

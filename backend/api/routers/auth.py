@@ -8,7 +8,7 @@ from ..repositories.base import UserRepository, ApiKeyRepository
 from ..schemas import UserCreate, UserRead, ApiKeyCreate, ApiKeyShow, Token
 from ..auth import get_password_hash, verify_password, generate_api_key, hash_api_key, create_access_token, create_refresh_token
 from ..config import ApiConfig
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, check_auth_rate_limit
 from jose import jwt, JWTError
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -18,7 +18,11 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: AsyncSession = Depends(get_db),
+    limit_key = Depends(check_auth_rate_limit)
+):
     repo = UserRepository(db)
     # OAuth2PasswordRequestForm uses 'username' for the email field
     user = await repo.get_by_email(form_data.username)
@@ -81,7 +85,11 @@ async def refresh_token(request_data: dict, db: AsyncSession = Depends(get_db)):
     return {"access_token": new_access_token, "refresh_token": new_refresh_token, "token_type": "bearer"}
 
 @router.post("/register", response_model=UserRead)
-async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(
+    user: UserCreate, 
+    db: AsyncSession = Depends(get_db),
+    limit_key = Depends(check_auth_rate_limit)
+):
     repo = UserRepository(db)
     
     # Check existing

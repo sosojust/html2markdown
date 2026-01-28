@@ -1,11 +1,11 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from uuid import UUID
 from datetime import datetime
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, description="Password must be at least 8 characters long")
 
 class UserRead(BaseModel):
     id: UUID

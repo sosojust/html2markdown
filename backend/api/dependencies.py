@@ -14,6 +14,9 @@ import uuid
 cfg = ApiConfig.from_env()
 # Global limiter for now
 limiter = RateLimiter(limit=cfg.RL_MAX, window_seconds=int(cfg.RL_WINDOW_MS / 1000))
+# Strict limiter for auth endpoints (5 requests per minute)
+auth_limiter = RateLimiter(limit=5, window_seconds=60)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token", auto_error=False)
 
 async def get_current_user(
@@ -78,6 +81,26 @@ async def check_rate_limit(request: Request, user=Depends(get_current_user)):
         # Fallback if Redis is down? Or fail open/closed?
         # For MVP, log error and fail open (allow)
         print(f"Rate limit check failed: {e}")
+        pass
+    
+    return identifier
+
+async def check_auth_rate_limit(request: Request):
+    """
+    Stricter rate limit for authentication endpoints to prevent brute force.
+    Always uses IP address as identifier since user might not be logged in.
+    """
+    if not cfg.RL_ENABLED:
+        return
+        
+    identifier = "auth:ip:" + request.client.host
+    
+    try:
+        allowed = await auth_limiter.is_allowed(identifier)
+        if not allowed:
+            raise HTTPException(status_code=429, detail="Too many authentication attempts. Please try again later.")
+    except Exception as e:
+        print(f"Auth rate limit check failed: {e}")
         pass
     
     return identifier

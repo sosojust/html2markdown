@@ -1,0 +1,60 @@
+services:
+  backend:
+    build: ./backend
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://md_user:md_password@db:5432/md_db
+      - REDIS_URL=redis://redis:6379/0
+      - AUTH_ENABLED=true
+      # 允许跨域请求的域名，默认为 *。
+      # 如果主要通过浏览器插件使用，建议保持为 *，因为插件在不同网页上运行时的 Origin 是动态的。
+      - ALLOWED_ORIGINS=*
+      # Set your secure keys in production!
+      # - SECRET_KEY=your_secure_secret_key
+      # - AUTH_TOKEN=your_secure_auth_token
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_network
+
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        - VITE_API_BASE_URL=/v1
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app_network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: md_user
+      POSTGRES_PASSWORD: md_password
+      POSTGRES_DB: md_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_network
+
+volumes:
+  db_data:
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge
