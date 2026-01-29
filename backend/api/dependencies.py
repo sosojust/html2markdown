@@ -11,9 +11,15 @@ from .repositories.base import ApiKeyRepository, UserRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 
-cfg = ApiConfig.from_env()
 # Global limiter for now
-limiter = RateLimiter(limit=cfg.RL_MAX, window_seconds=int(cfg.RL_WINDOW_MS / 1000))
+# We need to load config for limit values, but RateLimiter is stateful?
+# If we re-instantiate RateLimiter every time, we lose state (memory storage).
+# So RateLimiter MUST be global or singleton.
+# But we can load config values dynamically?
+# RateLimiter takes limit/window in __init__.
+# So we have to initialize it once.
+_cfg_for_limiter = ApiConfig.from_env()
+limiter = RateLimiter(limit=_cfg_for_limiter.RL_MAX, window_seconds=int(_cfg_for_limiter.RL_WINDOW_MS / 1000))
 # Strict limiter for auth endpoints (5 requests per minute)
 auth_limiter = RateLimiter(limit=5, window_seconds=60)
 
@@ -23,6 +29,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme), 
     db: AsyncSession = Depends(get_db)
 ):
+    cfg = ApiConfig.from_env()
     if not cfg.AUTH_ENABLED:
         return None
         
@@ -65,6 +72,7 @@ async def get_current_user(
     return user
 
 async def check_rate_limit(request: Request, user=Depends(get_current_user)):
+    cfg = ApiConfig.from_env()
     if not cfg.RL_ENABLED:
         return
     
@@ -90,6 +98,7 @@ async def check_auth_rate_limit(request: Request):
     Stricter rate limit for authentication endpoints to prevent brute force.
     Always uses IP address as identifier since user might not be logged in.
     """
+    cfg = ApiConfig.from_env()
     if not cfg.RL_ENABLED:
         return
         

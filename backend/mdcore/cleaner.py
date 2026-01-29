@@ -7,6 +7,23 @@ REMOVE_TAGS = {
 
 COMMON_LANGS = {"text", "txt", "python", "py", "javascript", "js", "java", "c", "cpp", "go", "rust", "html", "css", "bash", "sh", "shell", "sql", "json", "yaml", "xml", "mathematica", "matlab", "r", "ruby", "php", "swift", "kotlin", "typescript", "ts"}
 
+def inject_lang_marker(node: etree.Element, lang: str):
+    """
+    Inject language marker into code block for later extraction
+    """
+    if not lang:
+        return
+    # Clean language string
+    lang = lang.lower().replace("language-", "").replace("lang-", "")
+    marker = f"__MD_LANG={lang}__\n"
+    
+    # Check if marker already exists to avoid duplication
+    current_text = node.text or ""
+    if marker in current_text:
+        return
+        
+    node.text = marker + current_text
+
 def is_inside_tag(node: etree.Element, tag: str) -> bool:
     curr = node.getparent()
     while curr is not None:
@@ -50,6 +67,8 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
         if node.tag == "pre":
             # 搜索潜在的语言标签 (排除 code 内部)
             found_lang = None
+            lang_node = None
+            
             for child in node.iter():
                  if child.tag in ("span", "div"):
                      # 确保它不在 code 内部
@@ -61,7 +80,21 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                      full_text = child.xpath("string(.)").strip()
                      if full_text.lower() in COMMON_LANGS:
                          found_lang = full_text.lower()
+                         lang_node = child
                          break
+            
+            # 如果找到了语言标签节点，将其移除，避免作为代码内容输出
+            if lang_node is not None:
+                p = lang_node.getparent()
+                if p is not None:
+                    # Preserve tail text (which is the actual code content following the language badge)
+                    if lang_node.tail:
+                        prev = lang_node.getprevious()
+                        if prev is not None:
+                            prev.tail = (prev.tail or "") + lang_node.tail
+                        else:
+                            p.text = (p.text or "") + lang_node.tail
+                    p.remove(lang_node)
 
             code_node = node.find(".//code")
             if code_node is not None:
@@ -72,12 +105,24 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                         lang_cls = c
                         break
                 
+                # 检查 data-language 属性 (code)
+                if not lang_cls:
+                    data_lang = code_node.get("data-language")
+                    if data_lang:
+                        lang_cls = f"language-{data_lang}"
+                
                 # 如果 code 没语言，看 pre 自身有没有
                 if not lang_cls:
                     for c in (node.get("class") or "").split():
                         if c.startswith("language-") or c.startswith("lang-"):
                             lang_cls = c
                             break
+                            
+                    # 检查 data-language 属性 (pre)
+                    if not lang_cls:
+                        data_lang = node.get("data-language")
+                        if data_lang:
+                            lang_cls = f"language-{data_lang}"
                 
                 # 如果还没找到，使用搜索到的语言
                 if not lang_cls and found_lang:
@@ -87,11 +132,13 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                 # 注意：我们需要保留 code 的内容
                 # 简单做法：创建一个新的 code 节点，或者移动现有的
                 new_code = etree.Element("code")
-                if lang_cls:
-                    new_code.set("class", lang_cls)
                 
                 # 复制内容
                 new_code.text = code_node.xpath("string(.)")
+                
+                if lang_cls:
+                    new_code.set("class", lang_cls)
+                    # inject_lang_marker(new_code, lang_cls)
                 
                 # 替换 pre 的所有内容
                 # 不要使用 node.clear()，因为它会清除 pre 自身的属性
@@ -104,6 +151,40 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                 
                 # 既然已经处理了 pre 的内部结构，就不需要再对 pre 进行首行检测了
                 continue
+            else:
+                # Handle pre without code but with language
+                lang_cls = ""
+                for c in (node.get("class") or "").split():
+                    if c.startswith("language-") or c.startswith("lang-"):
+                        lang_cls = c
+                        break
+                
+                if not lang_cls:
+                    data_lang = node.get("data-language")
+                    if data_lang:
+                        lang_cls = f"language-{data_lang}"
+                
+                if not lang_cls and found_lang:
+                    lang_cls = f"language-{found_lang}"
+                
+                if lang_cls:
+                    # Wrap content in code
+                    new_code = etree.Element("code")
+                    new_code.set("class", lang_cls)
+                    
+                    if node.text:
+                        new_code.text = node.text
+                        node.text = None
+                    
+                    for child in list(node):
+                        node.remove(child)
+                        new_code.append(child)
+                        
+                    node.append(new_code)
+                    if lang_cls:
+                        node.set("class", (node.get("class") or "") + " " + lang_cls)
+                        # inject_lang_marker(new_code, lang_cls)
+                    continue
 
         # 0.3 处理 Case 4: 语言作为 pre 的前置兄弟节点
         # 结构：<div> <div class="header">lang</div> <pre>...</pre> </div>
@@ -130,6 +211,7 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                      current_cls = target_code.get("class") or ""
                      if f"language-{text}" not in current_cls and f"lang-{text}" not in current_cls:
                          target_code.set("class", (current_cls + f" language-{text}").strip())
+                         # inject_lang_marker(target_code, text)
                      continue
 
         # 0.4 处理 Case 5: 语言作为 pre 的首行文本
@@ -166,6 +248,7 @@ def clean_html_tree(root: etree.Element) -> etree.Element:
                         current_cls = target_code.get("class") or ""
                         if f"language-{lang}" not in current_cls and f"lang-{lang}" not in current_cls:
                             target_code.set("class", (current_cls + f" language-{lang}").strip())
+                            # inject_lang_marker(target_code, lang)
                         # 继续处理该节点（虽然 text 变了，但子节点还要遍历）
 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
+from uuid import UUID
 from ..db import get_db
 from ..models.entity import User, ApiKey
 from ..repositories.base import UserRepository, ApiKeyRepository
@@ -156,7 +157,7 @@ async def get_api_keys(
 
 @router.delete("/keys/{key_id}")
 async def delete_api_key(
-    key_id: str,
+    key_id: UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):

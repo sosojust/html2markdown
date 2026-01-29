@@ -6,7 +6,6 @@ from typing import Optional
 from jose import jwt
 from .config import ApiConfig
 
-cfg = ApiConfig.from_env()
 # Support multiple schemes for backward compatibility
 # pbkdf2_sha256 is the new default
 # argon2 and bcrypt are kept for verifying existing users
@@ -19,6 +18,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    cfg = ApiConfig.from_env()
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -29,6 +29,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
+    cfg = ApiConfig.from_env()
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta

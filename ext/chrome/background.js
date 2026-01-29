@@ -87,6 +87,21 @@ async function performConversion(html, conversionOptions, token, endpoint) {
              const updates = { sessionToken: access_token };
              if (new_refresh_token) updates.sessionRefreshToken = new_refresh_token;
              await chrome.storage.sync.set(updates);
+
+             // Notify frontend tabs to update their localStorage
+             // This prevents the frontend from overwriting our fresh token with its stale one
+             chrome.tabs.query({ url: ["http://localhost:5173/*", "http://127.0.0.1:5173/*"] }, (tabs) => {
+                for (const tab of tabs) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    type: "UPDATE_FROM_EXTENSION",
+                    token: access_token,
+                    refreshToken: new_refresh_token
+                  }).catch(err => {
+                     // Ignore errors (tab might be closed or script not ready)
+                     console.log("Failed to send token update to tab", tab.id, err);
+                  });
+                }
+             });
              
              // Retry original request
              headers["Authorization"] = "Bearer " + access_token;

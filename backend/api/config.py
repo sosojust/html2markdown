@@ -17,7 +17,7 @@ class ApiConfig(BaseModel):
     REDIS_URL: str = "redis://localhost:6379/0"
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: float = 30.0
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     ALLOWED_ORIGINS: str = "*"
 
@@ -38,6 +38,12 @@ class ApiConfig(BaseModel):
                 return int(v) if v is not None else default
             except Exception:
                 return default
+        def _env_float(key: str, default: float) -> float:
+            v = os.getenv(key)
+            try:
+                return float(v) if v is not None else default
+            except Exception:
+                return default
         return cls(
             MAX_HTML_LENGTH=_env_int("MAX_HTML_LENGTH", cls.model_fields["MAX_HTML_LENGTH"].default),
             PROCESS_TIMEOUT_MS=_env_int("PROCESS_TIMEOUT_MS", cls.model_fields["PROCESS_TIMEOUT_MS"].default),
@@ -53,6 +59,6 @@ class ApiConfig(BaseModel):
             REDIS_URL=_env_str("REDIS_URL", cls.model_fields["REDIS_URL"].default),
             SECRET_KEY=_env_str("SECRET_KEY", cls.model_fields["SECRET_KEY"].default),
             ALGORITHM=_env_str("ALGORITHM", cls.model_fields["ALGORITHM"].default),
-            ACCESS_TOKEN_EXPIRE_MINUTES=_env_int("ACCESS_TOKEN_EXPIRE_MINUTES", cls.model_fields["ACCESS_TOKEN_EXPIRE_MINUTES"].default),
+            ACCESS_TOKEN_EXPIRE_MINUTES=_env_float("ACCESS_TOKEN_EXPIRE_MINUTES", cls.model_fields["ACCESS_TOKEN_EXPIRE_MINUTES"].default),
             ALLOWED_ORIGINS=_env_str("ALLOWED_ORIGINS", cls.model_fields["ALLOWED_ORIGINS"].default),
         )
