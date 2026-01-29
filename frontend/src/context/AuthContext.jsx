@@ -9,8 +9,13 @@ export const AuthProvider = ({ children }) => {
     // Check for token in URL (SSO)
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get('token');
+    const urlRefreshToken = params.get('refresh_token');
+    
     if (urlToken) {
       localStorage.setItem('token', urlToken);
+      if (urlRefreshToken) {
+        localStorage.setItem('refresh_token', urlRefreshToken);
+      }
       // Clean URL immediately to hide token
       window.history.replaceState({}, document.title, window.location.pathname);
       return urlToken;

@@ -132,8 +132,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('btn-dashboard').addEventListener('click', async () => {
     // Use sessionToken for dashboard login. API Key (token) won't work for frontend auth.
-    const { sessionToken } = await chrome.storage.sync.get({ sessionToken: "" });
-    const url = sessionToken ? `http://localhost:5173/?token=${sessionToken}` : "http://localhost:5173/";
+    const { sessionToken, sessionRefreshToken } = await chrome.storage.sync.get({ sessionToken: "", sessionRefreshToken: "" });
+    let url = "http://localhost:5173/";
+    if (sessionToken) {
+      url += `?token=${sessionToken}`;
+      if (sessionRefreshToken) {
+        url += `&refresh_token=${sessionRefreshToken}`;
+      }
+    }
     chrome.tabs.create({ url });
   });
 

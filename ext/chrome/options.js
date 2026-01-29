@@ -30,8 +30,15 @@ async function load() {
 document.getElementById("dashboard-link").addEventListener("click", async (e) => {
   e.preventDefault();
   // Default to localhost dev server, but in production this should be the actual frontend URL
-  const { token } = await chrome.storage.sync.get({ token: "" });
-  const url = token ? `http://localhost:5173/?token=${token}` : "http://localhost:5173/";
+  // Prefer sessionToken for auto-login, fallback to no token (don't send API Key as it might break auth context)
+  const { sessionToken, sessionRefreshToken } = await chrome.storage.sync.get({ sessionToken: "", sessionRefreshToken: "" });
+  let url = "http://localhost:5173/";
+  if (sessionToken) {
+    url += `?token=${sessionToken}`;
+    if (sessionRefreshToken) {
+      url += `&refresh_token=${sessionRefreshToken}`;
+    }
+  }
   chrome.tabs.create({ url });
 });
 
