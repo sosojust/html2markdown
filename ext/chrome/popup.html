@@ -38,6 +38,26 @@
 
       <div class="divider my-0"></div>
 
+      <div class="form-control w-full">
+        <label class="label pb-1">
+          <span class="label-text text-xs">目标(Target)</span>
+        </label>
+        <select id="target-format" class="select select-bordered select-xs w-full">
+          <option value="markdown">Standard Markdown</option>
+          <option value="notion">Notion</option>
+        </select>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <button id="btn-start-conversion" class="btn btn-primary btn-sm w-full gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+            <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 9a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25V15a.75.75 0 001.5 0v-2.25H15a.75.75 0 000-1.5h-2.25V9z" clip-rule="evenodd" />
+          </svg>
+          开始转换 (Start Conversion)
+        </button>
+        <div id="notion-msg" class="text-xs text-center hidden"></div>
+      </div>
+
       <div class="flex flex-col gap-2">
         <button id="btn-dashboard" class="btn btn-ghost btn-xs w-full">
           打开管理后台 (Dashboard)

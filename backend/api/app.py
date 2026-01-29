@@ -6,12 +6,13 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 from mdcore.types import ConvertOptions
 from mdcore.converter import convert_html_to_markdown
+from mdcore.exporters.factory import ExporterFactory
 import os
 import time
 import anyio
 from .config import ApiConfig
 import httpx
-from .routers import auth
+from .routers import auth, export
 from .dependencies import get_current_user, check_rate_limit
 
 class ConvertRequest(BaseModel):
@@ -24,6 +25,8 @@ class ConvertByUrlRequest(BaseModel):
 
 app = FastAPI()
 app.include_router(auth.router)
+# app.include_router(user.router, prefix="/user", tags=["user"])
+app.include_router(export.router, prefix="/v1/export", tags=["export"])
 cfg = ApiConfig.from_env()
 
 MAX_HTML_LENGTH = cfg.MAX_HTML_LENGTH
@@ -76,6 +79,12 @@ async def convert(
     try:
         with anyio.fail_after(PROCESS_TIMEOUT_MS / 1000.0):
             md = await anyio.to_thread.run_sync(convert_html_to_markdown, req.html, opts)
+            
+            # Export Integration
+            if opts.target and opts.target != "markdown":
+                exporter = ExporterFactory.get_exporter(opts.target)
+                if exporter:
+                    md = exporter.export(md)
     except TimeoutError:
         raise HTTPException(status_code=504, detail="timeout")
     headers = {}

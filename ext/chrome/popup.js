@@ -1,9 +1,10 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  let { endpoint, token, sessionToken, sessionEmail } = await chrome.storage.sync.get({ 
+  let { endpoint, token, sessionToken, sessionEmail, options } = await chrome.storage.sync.get({ 
     endpoint: "http://localhost:8000",
     token: "",
     sessionToken: "",
-    sessionEmail: ""
+    sessionEmail: "",
+    options: { target: "markdown" }
   });
 
   const statusAlert = document.getElementById('status-alert');
@@ -11,6 +12,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   const userSection = document.getElementById('user-section');
   const userDisplay = document.getElementById('user-display');
   const loginMsg = document.getElementById('login-msg');
+
+  // Load Target Selector
+  const targetEl = document.getElementById("target-format");
+  
+  async function checkConfiguration(targetVal) {
+      const msg = document.getElementById("notion-msg");
+      if (!msg) return;
+
+      const { notion } = await chrome.storage.sync.get({ notion: {} });
+      
+      msg.classList.remove("text-error", "text-success");
+      msg.classList.add("text-warning");
+
+      if (targetVal === 'notion' && (!notion || !notion.token || !notion.page_id)) {
+          msg.textContent = "提示: 请先在扩展设置中配置 Notion";
+          msg.classList.remove("hidden");
+      } else {
+          msg.classList.add("hidden");
+      }
+  }
+
+  if(targetEl) {
+      const currentTarget = (options && options.target) ? options.target : "markdown";
+      targetEl.value = currentTarget;
+      
+      // Initial check
+      checkConfiguration(currentTarget);
+      
+      targetEl.addEventListener("change", async (e) => {
+        const val = e.target.value;
+        const { options: currentOptions } = await chrome.storage.sync.get({ options: {} });
+        currentOptions.target = val;
+        await chrome.storage.sync.set({ options: currentOptions });
+        
+        await checkConfiguration(val);
+      });
+  }
 
   function getEmailFromToken(token) {
     try {
@@ -31,10 +69,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       statusAlert.classList.add('hidden');
       loginSection.classList.add('hidden');
       userSection.classList.remove('hidden');
-      
-      // If we are using sessionToken (Login), show email
-      // If we are using token (API Key) AND no sessionToken, show API Key msg
-      // But effectiveToken is sessionToken || token.
       
       if (sessionToken) {
         // Logged In
@@ -57,6 +91,49 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Prioritize sessionToken (Login) over token (API Key)
   const effectiveToken = sessionToken || token;
   updateUI(effectiveToken);
+
+  // Auto-sync logic: If not logged in, try to pull token from Dashboard tabs
+  if (!sessionToken) {
+      try {
+          const tabs = await chrome.tabs.query({ url: ["http://localhost:5173/*", "http://127.0.0.1:5173/*"] });
+          if (tabs.length > 0) {
+              // Found a dashboard tab, try to read localStorage
+              const tab = tabs[0];
+              const results = await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  func: () => {
+                      return {
+                          token: localStorage.getItem("token"),
+                          refreshToken: localStorage.getItem("refresh_token"),
+                          email: localStorage.getItem("user_email")
+                      };
+                  }
+              });
+
+              if (results && results[0] && results[0].result) {
+                  const { token: remoteToken, refreshToken: remoteRefreshToken, email: remoteEmail } = results[0].result;
+                  if (remoteToken) {
+                      console.log("Auto-synced token from Dashboard tab");
+                      
+                      // Update local state
+                      sessionToken = remoteToken;
+                      sessionEmail = remoteEmail || getEmailFromToken(remoteToken);
+                      
+                      // Save to storage
+                      await chrome.storage.sync.set({ 
+                          sessionToken: sessionToken, 
+                          sessionRefreshToken: remoteRefreshToken,
+                          sessionEmail: sessionEmail 
+                      });
+                      
+                      updateUI(sessionToken);
+                  }
+              }
+          }
+      } catch (e) {
+          console.log("Auto-sync failed:", e);
+      }
+  }
 
   // Login Logic
   document.getElementById('btn-login').addEventListener('click', async () => {
@@ -99,51 +176,105 @@ document.addEventListener('DOMContentLoaded', async () => {
           sessionRefreshToken: newRefreshToken,
           sessionEmail: emailFromToken 
       });
-      loginMsg.textContent = "";
-      updateUI(newToken || token);
       
-    } catch (err) {
-      loginMsg.textContent = "登录失败: " + err.message;
+      updateUI(newToken);
+      loginMsg.textContent = "";
+      
+    } catch (e) {
+      loginMsg.textContent = "Error: " + e.message;
     }
   });
 
-  // Logout Logic
-  document.getElementById('btn-logout').addEventListener('click', async () => {
-    // Clear sessionToken, but KEEP token (API Key)
-    await chrome.storage.sync.set({ sessionToken: "", sessionEmail: "" });
-    sessionToken = ""; // Update local variable
-    sessionEmail = "";
-    
-    // Update UI (fallback to API Key if present)
-    const nextToken = token;
-    updateUI(nextToken);
-    
-    // Sync logout to frontend
-    // chrome.tabs.create({ url: "http://localhost:5173/?logout=true" });
-    
-    // Attempt background logout if possible, or just clear local state.
-    // For now, user requested NO redirection.
-  });
-
-  // Links
-  document.getElementById('link-register').addEventListener('click', () => {
+  document.getElementById('link-register').addEventListener('click', (e) => {
+    e.preventDefault();
     chrome.tabs.create({ url: "http://localhost:5173/register" });
   });
 
-  document.getElementById('btn-dashboard').addEventListener('click', async () => {
-    // Use sessionToken for dashboard login. API Key (token) won't work for frontend auth.
-    const { sessionToken, sessionRefreshToken } = await chrome.storage.sync.get({ sessionToken: "", sessionRefreshToken: "" });
-    let url = "http://localhost:5173/";
-    if (sessionToken) {
-      url += `?token=${sessionToken}`;
-      if (sessionRefreshToken) {
-        url += `&refresh_token=${sessionRefreshToken}`;
-      }
-    }
-    chrome.tabs.create({ url });
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await chrome.storage.sync.remove(["sessionToken", "sessionRefreshToken", "sessionEmail"]);
+    sessionToken = "";
+    sessionEmail = "";
+    updateUI(token); // Fallback to API Key if present
   });
 
-  document.getElementById('btn-options').addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
+  document.getElementById('btn-dashboard').addEventListener('click', () => {
+    // Construct URL with token if available (SSO)
+    let url = "http://localhost:5173";
+    if (sessionToken) {
+        url += `?token=${encodeURIComponent(sessionToken)}`;
+        // We might also want to pass refresh token if available, though frontend usually handles exchange
+        // Looking at frontend AuthContext, it checks 'token' and 'refresh_token' params
+        // But sessionRefreshToken is not always in scope here? 
+        // Let's check if we have it in storage or scope.
+        // We have sessionToken in scope. sessionRefreshToken is not a global var here?
+        // Wait, line 108: await chrome.storage.sync.set({ sessionToken: newToken, sessionRefreshToken: newRefreshToken... });
+        // But we don't load sessionRefreshToken into a global variable on init (lines 20-30 only load token/sessionToken).
+        // Let's fetch it from storage to be safe.
+        chrome.storage.sync.get(["sessionRefreshToken"], (items) => {
+             if (items.sessionRefreshToken) {
+                 url += `&refresh_token=${encodeURIComponent(items.sessionRefreshToken)}`;
+             }
+             chrome.tabs.create({ url });
+        });
+    } else {
+        chrome.tabs.create({ url });
+    }
   });
+  
+  document.getElementById('btn-options').addEventListener('click', () => {
+    if (chrome.runtime.openOptionsPage) {
+        chrome.runtime.openOptionsPage();
+    } else {
+        window.open(chrome.runtime.getURL('options.html'));
+    }
+  });
+
+  // Export Button Logic
+  const btnExport = document.getElementById('btn-start-conversion');
+  if (btnExport) {
+      btnExport.addEventListener("click", async () => {
+        const msg = document.getElementById("notion-msg");
+        const originalText = btnExport.innerHTML;
+        btnExport.disabled = true;
+        btnExport.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Processing...`;
+        if (msg) {
+             msg.classList.add("hidden");
+             msg.textContent = "";
+             msg.classList.remove("text-error", "text-success", "text-warning");
+        }
+
+        chrome.runtime.sendMessage({ type: "START_CONVERSION" }, (resp) => {
+          btnExport.disabled = false;
+          btnExport.innerHTML = originalText;
+          
+          if (chrome.runtime.lastError) {
+             if (msg) {
+                msg.textContent = "Error: " + chrome.runtime.lastError.message;
+                msg.classList.remove("hidden");
+                msg.classList.add("text-error");
+             }
+             return;
+          }
+
+          if (resp && !resp.success) {
+             if (msg) {
+                msg.textContent = "Error: " + (resp.error || "Unknown error");
+                msg.classList.remove("hidden");
+                msg.classList.add("text-error");
+             }
+          } else {
+             // Success
+             // If Notion, show success message. If Markdown, new tab opened, maybe show nothing or success.
+             if (msg) {
+                msg.textContent = "Success!";
+                msg.classList.remove("hidden");
+                msg.classList.add("text-success");
+                setTimeout(() => {
+                    msg.classList.add("hidden");
+                }, 3000);
+             }
+          }
+        });
+      });
+  }
 });

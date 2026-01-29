@@ -5,30 +5,77 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function getOptions() {
-  const { endpoint, options, token, sessionToken, sessionRefreshToken } = await chrome.storage.sync.get({
+  const { endpoint, options, token, sessionToken, sessionRefreshToken, notion, obsidian } = await chrome.storage.sync.get({
     endpoint: "http://localhost:8000",
     options: {
       strong_delimiter: "**",
       emphasis_delimiter: "*",
       code_fence: "```",
       unknown_tag_strategy: "inline_text",
-      expand_to_block_boundaries: true
+      expand_to_block_boundaries: true,
+      target: "markdown"
     },
     token: "",
     sessionToken: "",
-    sessionRefreshToken: ""
+    sessionRefreshToken: "",
+    notion: { token: "", page_id: "" },
+    obsidian: { vault: "" }
   });
   // enforce inline_text to avoid leaking raw HTML wrappers
   if (!options.unknown_tag_strategy || options.unknown_tag_strategy === "html_wrapper") {
     options.unknown_tag_strategy = "inline_text";
   }
-  return { endpoint, options, token, sessionToken, sessionRefreshToken };
+  return { endpoint, options, token, sessionToken, sessionRefreshToken, notion, obsidian };
+}
+
+// Initialize: Check for existing tokens in open dashboard tabs
+chrome.runtime.onInstalled.addListener(() => {
+    checkDashboardTabsForToken();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+    checkDashboardTabsForToken();
+});
+
+async function checkDashboardTabsForToken() {
+    try {
+        const tabs = await chrome.tabs.query({ url: ["http://localhost:5173/*", "http://127.0.0.1:5173/*"] });
+        for (const tab of tabs) {
+            try {
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: () => {
+                        const token = localStorage.getItem("token");
+                        const refreshToken = localStorage.getItem("refresh_token");
+                        const email = localStorage.getItem("user_email");
+                        if (token) {
+                            chrome.runtime.sendMessage({ 
+                                type: "SYNC_TOKEN", 
+                                token: token, 
+                                email: email,
+                                refreshToken: refreshToken
+                            });
+                        }
+                    }
+                });
+            } catch (err) {
+                console.log("Failed to inject sync script into tab", tab.id, err);
+            }
+        }
+    } catch (e) {
+        console.log("Error checking dashboard tabs:", e);
+    }
 }
 
 // Listen for token sync messages from content script
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg.type === "convert-selection") {
      return false;
+  }
+  
+  if (msg.type === "START_CONVERSION") {
+    handleUniversalExport(respond);
+    return true; // Keep channel open for async response
   }
   
   if (msg.type === "SYNC_TOKEN") {
@@ -44,6 +91,17 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
       }
       respond({ status: "ok" });
       return true;
+  }
+
+  if (msg.type === "CHECK_EXTENSION_TOKEN") {
+      getOptions().then(({ sessionToken, sessionEmail, sessionRefreshToken }) => {
+          respond({ 
+              token: sessionToken, 
+              email: sessionEmail, 
+              refreshToken: sessionRefreshToken 
+          });
+      });
+      return true; // Keep channel open
   }
 });
 
@@ -138,8 +196,8 @@ async function performConversion(html, conversionOptions, token, endpoint) {
   return j.markdown;
 }
 
-function showResult(markdown) {
-  chrome.storage.local.set({ lastMarkdown: markdown }, () => {
+function showResult(markdown, metadata = {}) {
+  chrome.storage.local.set({ lastMarkdown: markdown, lastMetadata: metadata }, () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("result.html") });
   });
 }
@@ -169,7 +227,7 @@ function showError(err, tabId = null) {
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const { endpoint, options, token, sessionToken } = await getOptions();
+  const { endpoint, options, token, sessionToken, notion, obsidian } = await getOptions();
   
   const effectiveToken = sessionToken ? sessionToken : token;
 
@@ -187,10 +245,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       try {
         if (!res || !res[0] || !res[0].result) throw new Error("Failed to retrieve page content");
         const html = res[0].result;
-        const conversionOptions = { domain: new URL(tab.url).origin, ...options };
         
-        const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
-        showResult(markdown);
+        if (options.target === 'notion') {
+             await exportToNotion(html, tab, options, endpoint, effectiveToken, notion);
+             chrome.notifications.create({
+                  type: "basic",
+                  iconUrl: chrome.runtime.getURL("icon48.png"),
+                  title: "Export Success",
+                  message: "Content exported to Notion successfully."
+             });
+        } else {
+             const conversionOptions = { domain: new URL(tab.url).origin, ...options };
+             const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
+             showResult(markdown, { target: options.target, obsidian });
+        }
       } catch (err) {
         showError(err, tab.id);
       }
@@ -300,11 +368,110 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
 
       const html = result.result.html;
-      const conversionOptions = { domain: new URL(tab.url).origin, ...options, expand_to_block_boundaries: expand };
-      const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
-      showResult(markdown);
+
+      if (options.target === 'notion') {
+          const notionOptions = { ...options, expand_to_block_boundaries: expand };
+          await exportToNotion(html, tab, notionOptions, endpoint, effectiveToken, notion);
+          chrome.notifications.create({
+              type: "basic",
+              iconUrl: chrome.runtime.getURL("icon48.png"),
+              title: "Export Success",
+              message: "Selection exported to Notion successfully."
+          });
+      } else {
+          const conversionOptions = { domain: new URL(tab.url).origin, ...options, expand_to_block_boundaries: expand };
+          const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
+          showResult(markdown, { target: options.target, obsidian });
+      }
     } catch (err) {
       showError(err, tab.id);
     }
   }
 });
+
+async function exportToNotion(html, tab, options, endpoint, effectiveToken, notion) {
+    if (!notion || !notion.token || !notion.page_id) {
+        throw new Error("请先在设置中配置 Notion Token 和 Page ID");
+    }
+
+    // 1. Convert to Markdown (force target=markdown)
+    const conversionOptions = { domain: new URL(tab.url).origin, ...options, target: "markdown" };
+    const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
+
+    // Refresh token check
+    const { sessionToken: freshSessionToken } = await chrome.storage.sync.get(["sessionToken"]);
+    let currentToken = effectiveToken;
+    if (freshSessionToken) {
+        currentToken = freshSessionToken;
+    }
+
+    // 2. Export to Notion
+    const resp = await fetch(`${endpoint}/v1/export/notion`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + currentToken
+        },
+        body: JSON.stringify({
+            markdown: markdown,
+            token: notion.token,
+            page_id: notion.page_id
+        })
+    });
+
+    if (!resp.ok) {
+        const errJson = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(errJson.detail || "Export failed");
+    }
+
+    const result = await resp.json();
+    if (!result.success) {
+        throw new Error("Export reported failure");
+    }
+    return result;
+}
+
+async function handleUniversalExport(respond) {
+  try {
+    const { endpoint, options, token, sessionToken, notion, obsidian } = await getOptions();
+    let effectiveToken = sessionToken ? sessionToken : token;
+
+    if (!effectiveToken) {
+        respond({ success: false, error: "未登录，请先登录或配置 API Key" });
+        return;
+    }
+    
+    // Get active tab content
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+        respond({ success: false, error: "无法获取当前标签页" });
+        return;
+    }
+
+    const injectionResults = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => document.documentElement.outerHTML
+    });
+
+    if (!injectionResults || !injectionResults[0] || !injectionResults[0].result) {
+        respond({ success: false, error: "无法获取页面内容" });
+        return;
+    }
+
+    const html = injectionResults[0].result;
+    
+    if (options.target === 'notion') {
+        await exportToNotion(html, tab, options, endpoint, effectiveToken, notion);
+        respond({ success: true });
+    } else {
+        const conversionOptions = { domain: new URL(tab.url).origin, ...options };
+        const markdown = await performConversion(html, conversionOptions, effectiveToken, endpoint);
+        respond({ success: true });
+        showResult(markdown, { target: options.target, obsidian });
+    }
+
+  } catch (err) {
+      console.error("Export Error:", err);
+      respond({ success: false, error: err.message });
+  }
+}

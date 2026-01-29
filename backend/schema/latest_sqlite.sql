@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL UNIQUE,                -- 用户邮箱，用于登录和唯一标识
     password_hash TEXT,                        -- 加密后的密码哈希值
     tier TEXT DEFAULT 'free',                  -- 用户等级 (free/pro/admin)，决定API限流配额
+    preferences TEXT,                          -- 用户偏好设置 (JSON String)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 账户创建时间
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP  -- 账户最后更新时间
 );

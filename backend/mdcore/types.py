@@ -18,3 +18,4 @@ class ConvertOptions(BaseModel):
     list_incomplete_strategy: str = "expand_item"
     unordered_marker: str = "-"
     list_indent_spaces: int = 2
+    target: Optional[str] = "markdown" # markdown, obsidian, notion

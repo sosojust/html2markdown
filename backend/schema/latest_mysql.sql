@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE COMMENT '用户邮箱，用于登录和唯一标识',
     password_hash VARCHAR(255) COMMENT '加密后的密码哈希值',
     tier VARCHAR(50) DEFAULT 'free' COMMENT '用户等级 (free/pro/admin)，决定API限流配额',
+    preferences TEXT COMMENT '用户偏好设置 (JSON String)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '账户创建时间',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '账户最后更新时间',
     INDEX idx_users_email (email)

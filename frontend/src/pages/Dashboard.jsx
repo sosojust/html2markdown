@@ -6,6 +6,10 @@ const Dashboard = () => {
   const [keys, setKeys] = useState([]);
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState(null);
+  
+  // Integration Config State
+  const [notionConfig, setNotionConfig] = useState({ token: '', pageId: '' });
+  const [configSaved, setConfigSaved] = useState(false);
 
   const fetchKeys = async () => {
     try {
@@ -18,7 +22,17 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchKeys();
-  }, []);
+    
+    // Load configs from user preferences
+    if (user && user.preferences) {
+        try {
+            const prefs = JSON.parse(user.preferences);
+            if (prefs.notion) setNotionConfig(prefs.notion);
+        } catch (e) {
+            console.error("Failed to parse preferences", e);
+        }
+    }
+  }, [user]); // Add user dependency
 
   const createKey = async () => {
     try {
@@ -39,6 +53,23 @@ const Dashboard = () => {
     } catch (err) {
       alert("Failed to delete key");
     }
+  };
+  
+  const handleSaveConfig = async () => {
+      const preferences = JSON.stringify({
+          notion: notionConfig
+      });
+      
+      try {
+          await api.patch('/auth/me', { preferences });
+          setConfigSaved(true);
+          setTimeout(() => setConfigSaved(false), 2000);
+          
+          // Refresh user info might be good, but AuthContext usually caches it. 
+          // For now, local state is already updated.
+      } catch (err) {
+          alert("Failed to save configuration: " + (err.response?.data?.detail || err.message));
+      }
   };
 
   return (
@@ -119,6 +150,49 @@ const Dashboard = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        {/* Integration Settings Section */}
+        <div className="card bg-base-100 shadow-xl">
+          <div className="card-body">
+            <h2 className="card-title">Integration Settings</h2>
+            <p className="text-sm text-base-content/70">Configure your export destinations.</p>
+            
+            <div className="divider">Notion</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="form-control">
+                <label className="label"><span className="label-text">Notion Token</span></label>
+                <input 
+                  type="password" 
+                  className="input input-bordered" 
+                  placeholder="secret_..."
+                  value={notionConfig.token}
+                  onChange={(e) => setNotionConfig({...notionConfig, token: e.target.value})}
+                />
+              </div>
+              <div className="form-control">
+                <label className="label"><span className="label-text">Page ID</span></label>
+                <input 
+                  type="text" 
+                  className="input input-bordered" 
+                  placeholder="Page ID"
+                  value={notionConfig.pageId}
+                  onChange={(e) => setNotionConfig({...notionConfig, pageId: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center gap-4">
+               <button 
+                 className="btn btn-primary"
+                 onClick={handleSaveConfig}
+               >
+                 Save Configuration
+               </button>
+               {configSaved && <span className="text-success text-sm">Saved locally!</span>}
+            </div>
+
           </div>
         </div>
       </div>

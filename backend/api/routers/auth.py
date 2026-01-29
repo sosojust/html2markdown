@@ -6,7 +6,7 @@ from uuid import UUID
 from ..db import get_db
 from ..models.entity import User, ApiKey
 from ..repositories.base import UserRepository, ApiKeyRepository
-from ..schemas import UserCreate, UserRead, ApiKeyCreate, ApiKeyShow, Token
+from ..schemas import UserCreate, UserRead, UserUpdate, ApiKeyCreate, ApiKeyShow, Token
 from ..auth import get_password_hash, verify_password, generate_api_key, hash_api_key, create_access_token, create_refresh_token
 from ..config import ApiConfig
 from ..dependencies import get_current_user, check_auth_rate_limit
@@ -16,6 +16,20 @@ router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
 @router.get("/me", response_model=UserRead)
 async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@router.patch("/me", response_model=UserRead)
+async def update_user_me(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Check if preferences is being updated
+    if user_update.preferences is not None:
+        current_user.preferences = user_update.preferences
+    
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 @router.post("/token", response_model=Token)

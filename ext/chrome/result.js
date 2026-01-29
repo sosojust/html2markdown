@@ -139,7 +139,7 @@ function renderWithLib(md) {
 }
 
 async function load() {
-  const { lastMarkdown } = await chrome.storage.local.get({ lastMarkdown: "" });
+  const { lastMarkdown, lastMetadata } = await chrome.storage.local.get({ lastMarkdown: "", lastMetadata: {} });
   const md = lastMarkdown || "";
   const ta = document.getElementById("md");
   const pv = document.getElementById("preview");
@@ -148,6 +148,33 @@ async function load() {
     pv.innerHTML = renderWithLib(md);
   } else {
     pv.innerHTML = renderMarkdown(md);
+  }
+
+  // Obsidian Integration
+  if (lastMetadata && lastMetadata.target === 'obsidian' && lastMetadata.obsidian && lastMetadata.obsidian.vault) {
+      const btn = document.getElementById("btn-open-obsidian");
+      if (btn) {
+          btn.classList.remove("hidden");
+          btn.onclick = () => {
+              const content = document.getElementById("md").value;
+              const vault = lastMetadata.obsidian.vault;
+              
+              // Simple title generation
+              const date = new Date().toISOString().slice(0, 10);
+              const title = `Clipped Note ${date} ${Date.now().toString().slice(-4)}`;
+              
+              const url = `obsidian://new?vault=${encodeURIComponent(vault)}&name=${encodeURIComponent(title)}&content=${encodeURIComponent(content)}`;
+              
+              // Check length roughly (URL limit varies, safe bet ~2k-32k depending on browser/OS, but for custom protocol it might be shorter or longer)
+              // If extremely long, warn user.
+              if (url.length > 8000) {
+                  alert("内容过长，无法通过链接直接打开 Obsidian。\n建议使用下载功能，保存到 Vault 文件夹中。");
+                  return;
+              }
+              
+              window.location.href = url;
+          };
+      }
   }
 }
 

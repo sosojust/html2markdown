@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
 
@@ -7,10 +7,14 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, description="Password must be at least 8 characters long")
 
+class UserUpdate(BaseModel):
+    preferences: Optional[str] = None
+
 class UserRead(BaseModel):
     id: UUID
     email: EmailStr
     tier: str
+    preferences: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -37,3 +41,17 @@ class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str
+
+class ConvertOptions(BaseModel):
+    format: str = "markdown"  # markdown, html, text
+    target: Optional[str] = "markdown" # markdown, obsidian, notion
+    images: Optional[str] = None # None, "base64", "upload" (future)
+
+class ExportNotionRequest(BaseModel):
+    markdown: str
+    token: str
+    page_id: str
+
+class ExportNotionResponse(BaseModel):
+    success: bool
+    details: Optional[Dict[str, Any]] = None
