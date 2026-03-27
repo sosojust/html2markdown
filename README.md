@@ -75,7 +75,7 @@
   - Vite 会在运行 `npm run dev` 或 `npm run build` 时自动加载对应的环境变量
 
 ## 生产部署
-本项目提供基于 Docker Compose 的一键生产部署方案，包含后端、前端（Nginx）、PostgreSQL 数据库和 Redis 缓存。
+本项目提供基于 Docker Compose 的一键生产部署方案，包含后端、前端（Nginx）、PostgreSQL 数据库；可选：Redis（用于开启限流时使用）。
 
 ### 1. 准备工作
 确保服务器已安装 Docker 和 Docker Compose。
@@ -102,7 +102,7 @@ docker compose -f docker-compose.prod.yml exec -T db psql -U md_user -d md_db < 
 - `SECRET_KEY`: 用于 JWT 签名的密钥（生产环境务必修改）
 - `AUTH_ENABLED`: 是否开启鉴权（默认为 true）
 - `DATABASE_URL`: 数据库连接串
-- `REDIS_URL`: Redis 连接串
+- 可选 `REDIS_URL`: 仅在启用限流（`RL_ENABLED=1`）时需要配置的 Redis 连接串
 - `ALLOWED_ORIGINS`: 允许跨域访问的域名，生产环境建议设置为前端域名（如 `https://example.com`），多个域名用逗号分隔
 
 ### 4. 域名配置（可选）

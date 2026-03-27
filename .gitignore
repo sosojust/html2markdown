@@ -49,6 +49,7 @@ yarn.lock
 .vite/
 dist/
 
+ext/dist_chrome/
 
 # IDEs
 .idea/

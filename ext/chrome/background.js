@@ -231,12 +231,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   
   const effectiveToken = sessionToken ? sessionToken : token;
 
-  // Pre-check for token. If missing, prompt login immediately to avoid 401 overhead
-  if (!effectiveToken || !effectiveToken.trim()) {
-    promptLogin();
-    return;
-  }
-
   if (info.menuItemId === "convert-page") {
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
