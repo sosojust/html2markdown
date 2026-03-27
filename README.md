@@ -49,9 +49,17 @@
   - X-RateLimit-Limit、X-RateLimit-Remaining、X-RateLimit-Reset（毫秒；reset_ms = max(bucket.ts + RL_WINDOW_MS - now_ms, 0)）
 
 ## Chrome 扩展
-- 加载本地扩展：
+- 加载本地开发扩展：
   - 打开 chrome://extensions，开启开发者模式
   - 选择“加载已解压的扩展”，指向 ext/chrome
+- 打包上线扩展（替换API地址）：
+  - 复制 `ext/chrome/.env.example` 为 `ext/chrome/.env`，并配置你的线上域名
+    ```env
+    API_URL=https://api.yourdomain.com
+    DASHBOARD_URL=https://yourdomain.com
+    ```
+  - 运行 `cd ext/chrome && npm run build`
+  - 将生成的 `ext/dist_chrome` 文件夹加载到 Chrome 或打包发布
 - 选项：
   - 后端地址 endpoint
   - API Key：需先在前端控制台（Frontend Dashboard）注册并创建 Key，复制后填入
@@ -59,6 +67,12 @@
 - 使用：
   - 右键菜单选择“转为 Markdown（整页/选区）”
   - 转换结果自动保存并打开 result.html 预览页
+
+## 前端 Web 应用
+- 环境变量配置：
+  - 本地开发：使用 `frontend/.env.development`，默认 API 为 `http://localhost:8000/v1`
+  - 生产上线：修改 `frontend/.env.production`，将 `VITE_API_BASE_URL` 指向你的线上 API 域名
+  - Vite 会在运行 `npm run dev` 或 `npm run build` 时自动加载对应的环境变量
 
 ## 生产部署
 本项目提供基于 Docker Compose 的一键生产部署方案，包含后端、前端（Nginx）、PostgreSQL 数据库和 Redis 缓存。
@@ -115,6 +129,9 @@ docker compose -f docker-compose.prod.yml exec -T db psql -U md_user -d md_db < 
    生产环境强烈建议开启 HTTPS。您可以在宿主机使用另一层 Nginx/Caffeine 进行 SSL 卸载，并将流量转发到本服务的 80 端口；或者直接挂载证书到容器内并修改 `frontend/nginx.conf` 开启 443 监听。
 
 ## 变更记录
+- 2026-03-16:
+  - 工程：前端 Web 应用增加 `.env.development` 和 `.env.production` 环境变量支持
+  - 工程：Chrome 插件增加 `build.js` 打包脚本，支持根据 `.env` 环境变量自动替换 API 和 Dashboard 的生产域名
 - 2026-01-28:
   - 安全：增加登录/注册接口的独立限流策略（5次/分钟）
   - 安全：增强用户注册密码强度校验（至少8位）
